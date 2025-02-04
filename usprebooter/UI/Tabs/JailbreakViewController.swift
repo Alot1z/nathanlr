@@ -32,7 +32,7 @@ class JailbreakViewController: UIViewController, UITableViewDelegate, UITableVie
         
         func isCurrentiOSVersionInRange() -> Bool {
             let startVersion = "16.5.1"
-            let endVersion = "16.6.1"
+            let endVersion = "17.0"
             let systemVersion = UIDevice.current.systemVersion
             func versionTuple(from versionString: String) -> (Int, Int, Int) {
                 let components = versionString.split(separator: ".").compactMap { Int($0) }
@@ -105,9 +105,9 @@ class JailbreakViewController: UIViewController, UITableViewDelegate, UITableVie
         tableView.separatorStyle = .none
         tableView.register(CustomTableViewCell.self, forCellReuseIdentifier: "Cell")
         if let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-            Logger.shared.log(logType: .name, subTitle: "Supported Versions: 16.5.1 - 16.6.1\nApp Version: \(appVersion)")
+            Logger.shared.log(logType: .name, subTitle: "Supported Versions: 16.5.1 - 17.0\nApp Version: \(appVersion)")
         } else {
-            Logger.shared.log(logType: .name, subTitle: "Supported Versions: 16.5.1 - 16.6.1")
+            Logger.shared.log(logType: .name, subTitle: "Supported Versions: 16.5.1 - 17.0")
         }
         tableView.reloadData()
     }
