@@ -1,1 +1,95 @@
-d
+name: Build IPA
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+        - release
+        - debug
+      ios_version:
+        description: 'iOS Target Version'
+        required: true
+        default: '17.0'
+        type: string
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+  THEOS: ${{ github.workspace }}/theos
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Setup Build Environment
+      run: |
+        echo "Setting up build environment..."
+        sudo xcode-select --switch /Applications/Xcode.app
+        brew install ldid dpkg xz cmake ninja wget curl libarchive make || true
+        brew install llvm || true
+        echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+
+    - name: Setup Theos
+      run: |
+        echo "Setting up Theos..."
+        git clone --recursive https://github.com/theos/theos.git $THEOS
+        curl -LO https://github.com/theos/sdks/archive/master.zip
+        unzip master.zip -d $THEOS/sdks
+        mv $THEOS/sdks/sdks-master/*.sdk $THEOS/sdks/
+        rm -rf master.zip $THEOS/sdks/sdks-master
+
+    - name: Build TrollStore Core
+      run: |
+        echo "Building TrollStore core..."
+        make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+
+    - name: Process Binaries
+      run: |
+        echo "Processing binaries..."
+        cd packages
+        for deb in *.deb; do
+          echo "Processing $deb..."
+          dpkg-deb -R "$deb" extracted
+          mkdir -p Payload/TrollStore.app
+          cp -r extracted/Applications/* Payload/ || true
+          cp -r extracted/Library Payload/TrollStore.app/ || true
+          if [ -f "Payload/TrollStore.app/TrollStore" ]; then
+            echo "Inserting dylib..."
+            insert_dylib --all-yes "@executable_path/TrollStore" Payload/TrollStore.app/TrollStore || {
+              echo "Failed to insert dylib, retrying with sudo..."
+              sudo insert_dylib --all-yes "@executable_path/TrollStore" Payload/TrollStore.app/TrollStore
+            }
+          fi
+          zip -r "${deb%.*}.ipa" Payload
+          ldid -S../entitlements.plist "${deb%.*}.ipa"
+          rm -rf extracted Payload
+        done
+
+    - name: Verify Build
+      run: |
+        echo "Verifying build artifacts..."
+        ls -la packages/
+        file packages/*.ipa || echo "No IPA files found"
+        file packages/*.deb || echo "No DEB files found"
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: IPA Build
+        path: packages/*.ipa
+        if-no-files-found: error
